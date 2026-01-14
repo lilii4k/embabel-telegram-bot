@@ -24,7 +24,7 @@ import com.embabel.template.tools.TelegramTools
 import org.springframework.context.annotation.Profile
 
 @Agent(
-    description = "Send messages to users via Telegram"
+    description = "Send one-way notification messages via Telegram. Use this agent ONLY for sending messages that do NOT require a response. This is for notifications, announcements, alerts, or informing someone of something. Do NOT use this for asking questions or collecting responses - use SurveyAgent for that. Keywords: send message, notify, announce, tell, inform."
 )
 @Profile("!test")
 class TelegramNotificationAgent(
