@@ -136,41 +136,50 @@ Responses (3/3):
 
 ## How It Works
 
-### SurveyAgent
-The bot uses a multi-action agent that handles the complete survey workflow:
+The bot uses two specialized agents that handle different parts of the survey workflow:
 
-**Action 1: collectSurveyResponses**
+### SurveyInitiationAgent
+Handles survey creation and initiation:
 - Understands natural language survey requests
-- Extracts chat ID, question, and expected response count
-- Creates surveys in the database
-- Waits for all responses to be collected (polls every 2 seconds)
-- Returns SurveyResults object to the blackboard
+- Extracts chat ID, question, and expected response count using AI
+- Creates survey records in the database
+- Sends the survey question to Telegram
+- Returns a SurveyInitiated object with the survey details
 
-**Action 2: processSurveyResults**
-- Receives SurveyResults from the blackboard
-- Processes and formats the collected responses
-- Displays availability summary
-- Can be extended to pass data to meeting room finder
+**Keywords:** ask, question, survey, poll, create, send
 
-**Keywords:** ask, question, survey, poll, fetch, collect, response, answer
+### SurveyResultsAgent
+Handles survey completion and results processing:
+- Triggered when a user submits a survey response
+- Checks if the survey has received all expected responses
+- When complete, analyzes responses using AI to extract insights
+- Publishes formatted results back to Telegram
+- Marks the survey as completed in the database
+
+**Keywords:** process, results, analyze, complete
 
 ## Architecture
 
 ```
 User Request (Natural Language)
     ↓
-SurveyAgent
-    ↓
-Action 1: collectSurveyResponses
+SurveyInitiationAgent
+    ├─ Parse request with AI
     ├─ Create survey in database
     ├─ Send question via Telegram
-    ├─ Poll for completion (every 2s, 10min timeout)
-    └─ Return SurveyResults → Blackboard
+    └─ Return SurveyInitiated
     ↓
-Action 2: processSurveyResults
-    ├─ Receive SurveyResults from blackboard
-    ├─ Format availability summary
-    └─ [Future: Pass to meeting room finder]
+[Users respond in Telegram]
+    ↓
+TelegramBotListener (receives responses)
+    ├─ Store response in database
+    └─ Trigger SurveyResultsAgent
+    ↓
+SurveyResultsAgent
+    ├─ Check if survey is complete
+    ├─ If complete: analyze responses with AI
+    ├─ Generate insights summary
+    └─ Publish results to Telegram
 ```
 
 ## Database Schema
@@ -191,6 +200,14 @@ Action 2: processSurveyResults
 - userName
 - response
 - respondedAt
+
+### pending_response_changes
+- id (PK)
+- surveyId (FK)
+- userId
+- oldResponse
+- newResponse
+- requestedAt
 
 ## Troubleshooting
 
@@ -223,22 +240,26 @@ If the bot isn't receiving messages in group chats:
 ```
 src/main/kotlin/com/embabel/template/
 ├── agent/
-│   └── SurveyAgent.kt              # Multi-action survey agent
+│   ├── SurveyInitiationAgent.kt    # Creates and sends surveys
+│   └── SurveyResultsAgent.kt       # Processes responses and publishes results
 ├── bot/
 │   └── TelegramBotListener.kt      # Receives Telegram updates
 ├── domain/
-│   └── SurveyResults.kt            # Survey results for blackboard
+│   ├── SurveyCheckInput.kt         # Input for checking survey completion
+│   ├── SurveyInitiated.kt          # Survey initiation result
+│   └── SurveyResults.kt            # Survey results data
 ├── entity/
+│   ├── PendingResponseChange.kt    # Pending response modifications
 │   ├── Survey.kt                   # Survey entity
 │   ├── SurveyResponse.kt           # Response entity
 │   └── SurveyStatus.kt             # Status enum
 ├── repository/
+│   ├── PendingResponseChangeRepository.kt # Pending change data access
 │   ├── SurveyRepository.kt         # Survey data access
 │   └── SurveyResponseRepository.kt # Response data access
 ├── service/
 │   └── SurveyService.kt            # Survey business logic
 └── tools/
-    ├── SurveyTools.kt              # Survey operations
     └── TelegramTools.kt            # Telegram messaging
 ```
 
