@@ -19,15 +19,17 @@ import jakarta.persistence.*
 import java.time.LocalDateTime
 
 @Entity
-@Table(name = "survey_responses")
-data class SurveyResponse(
+@Table(name = "pending_response_changes")
+data class PendingResponseChange(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long? = null,
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "survey_id", nullable = false)
-    val survey: Survey,
+    @Column(nullable = false)
+    val surveyId: Long,
+
+    @Column(nullable = false)
+    val chatId: Long,
 
     @Column(nullable = false)
     val userId: Long,
@@ -36,8 +38,11 @@ data class SurveyResponse(
     val userName: String?,
 
     @Column(nullable = false, columnDefinition = "TEXT")
-    var response: String,
+    val oldResponse: String,
+
+    @Column(nullable = false, columnDefinition = "TEXT")
+    val newResponse: String,
 
     @Column(nullable = false)
-    var respondedAt: LocalDateTime = LocalDateTime.now()
+    val createdAt: LocalDateTime = LocalDateTime.now()
 )

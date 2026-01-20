@@ -13,16 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.embabel.template.repository
+package com.embabel.template.domain
 
-import com.embabel.template.entity.SurveyResponse
-import org.springframework.data.jpa.repository.JpaRepository
-import org.springframework.stereotype.Repository
-
-@Repository
-interface SurveyResponseRepository : JpaRepository<SurveyResponse, Long> {
-    fun findBySurveyId(surveyId: Long): List<SurveyResponse>
-    fun findBySurveyIdAndUserId(surveyId: Long, userId: Long): SurveyResponse?
-    fun existsBySurveyIdAndUserId(surveyId: Long, userId: Long): Boolean
-    fun countBySurveyId(surveyId: Long): Int
-}
+data class SurveyInitiated(
+    val surveyId: Long,
+    val chatId: Long,
+    val question: String,
+    val expectedCount: Int
+)

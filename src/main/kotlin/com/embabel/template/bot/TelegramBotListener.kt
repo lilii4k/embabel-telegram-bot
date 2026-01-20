@@ -15,6 +15,9 @@
  */
 package com.embabel.template.bot
 
+import com.embabel.agent.api.invocation.AgentInvocation
+import com.embabel.agent.core.AgentPlatform
+import com.embabel.template.domain.SurveyCheckInput
 import com.embabel.template.service.SurveyService
 import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
@@ -30,7 +33,8 @@ import org.telegram.telegrambots.updatesreceivers.DefaultBotSession
 class TelegramBotListener(
     @Value("\${telegram.bot.token}") private val botToken: String,
     @Value("\${telegram.bot.username:EmbabelBot}") private val botUsername: String,
-    private val surveyService: SurveyService
+    private val surveyService: SurveyService,
+    private val agentPlatform: AgentPlatform
 ) : TelegramLongPollingBot(botToken) {
 
     private val logger = LoggerFactory.getLogger(TelegramBotListener::class.java)
@@ -57,12 +61,31 @@ class TelegramBotListener(
                 val userName = message.from?.firstName
                 val messageText = message.text
 
-                // Process survey responses directly
+                val pendingChange = surveyService.getPendingResponseChange(chatId, userId)
+                if (pendingChange != null) {
+                    when (messageText.trim().lowercase()) {
+                        "yes", "y" -> {
+                            surveyService.applyResponseChange(chatId, userId)
+                            logger.info("User $userId confirmed response change")
+
+                            invokeSurveyResultsAgent(pendingChange.surveyId)
+                            return
+                        }
+                        "no", "n" -> {
+                            surveyService.rejectResponseChange(chatId, userId)
+                            logger.info("User $userId rejected response change")
+                            return
+                        }
+                    }
+                }
+
                 val activeSurvey = surveyService.getActiveSurvey(chatId)
                 if (activeSurvey != null) {
                     val recorded = surveyService.recordResponse(activeSurvey, userId, userName, messageText)
                     if (recorded) {
                         logger.info("Processed survey response from user $userId for survey ${activeSurvey.id}")
+
+                        invokeSurveyResultsAgent(activeSurvey.id!!)
                     }
                 }
 
@@ -70,6 +93,30 @@ class TelegramBotListener(
             }
         } catch (e: Exception) {
             logger.error("Error processing update: ${update.updateId}", e)
+        }
+    }
+    private fun invokeSurveyResultsAgent(surveyId: Long) {
+        try {
+            logger.info("Invoking SurveyResultsAgent for survey $surveyId")
+
+            val invocation = AgentInvocation
+                .builder(agentPlatform)
+                .build(String::class.java)
+
+            invocation.invokeAsync(SurveyCheckInput(surveyId))
+                .thenAccept { analysis ->
+                    if (analysis != null) {
+                        logger.info("Survey $surveyId completed and results published: $analysis")
+                    } else {
+                        logger.info("Survey $surveyId not yet complete")
+                    }
+                }
+                .exceptionally { error ->
+                    logger.error("Error invoking SurveyResultsAgent for survey $surveyId", error)
+                    null
+                }
+        } catch (e: Exception) {
+            logger.error("Failed to invoke SurveyResultsAgent for survey $surveyId", e)
         }
     }
 }

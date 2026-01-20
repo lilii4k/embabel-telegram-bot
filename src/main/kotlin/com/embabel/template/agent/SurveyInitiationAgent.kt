@@ -20,23 +20,26 @@ import com.embabel.agent.api.annotation.Action
 import com.embabel.agent.api.annotation.Agent
 import com.embabel.agent.api.common.OperationContext
 import com.embabel.agent.domain.io.UserInput
-import com.embabel.template.domain.SurveyResults
-import com.embabel.template.tools.SurveyTools
+import com.embabel.template.domain.SurveyInitiated
+import com.embabel.template.service.SurveyService
+import com.embabel.template.tools.TelegramTools
 import org.slf4j.LoggerFactory
 import org.springframework.context.annotation.Profile
 
-@Agent(description = "Ask questions and collect responses from Telegram users (one or more people). Use this agent whenever the user wants to ASK someone a question and get their response back. This includes surveys, polls, collecting feedback, or asking any individual or group for their input. This agent creates the survey, waits for all responses, and then processes the results. Keywords: ask, question, survey, poll, fetch, collect, response, answer, what is, tell me.")
+@Agent(description = "Creates and sends surveys to Telegram users. Use this agent to initiate a new survey. Keywords: ask, question, survey, poll, create, send.")
 @Profile("!test")
-class SurveyAgent(
-    private val surveyTools: SurveyTools
+class SurveyInitiationAgent(
+    private val surveyService: SurveyService,
+    private val telegramTools: TelegramTools
 ) {
-    private val logger = LoggerFactory.getLogger(SurveyAgent::class.java)
+    private val logger = LoggerFactory.getLogger(SurveyInitiationAgent::class.java)
 
+    @AchievesGoal(description = "Survey created and sent to Telegram")
     @Action
-    fun collectSurveyResponses(
+    fun initiateSurvey(
         userInput: UserInput,
         context: OperationContext
-    ): SurveyResults {
+    ): SurveyInitiated {
         val extractionPrompt = """
             Parse this survey request and extract the parameters in this exact format:
             chatId: <number>
@@ -83,36 +86,25 @@ class SurveyAgent(
 
         logger.info("Parsed - chatId: $chatId, question: $question, expectedCount: $expectedCount")
 
-        val createResult = surveyTools.createSurvey(chatId, question, expectedCount)
-        val surveyId = createResult.substringAfter("ID: ").substringBefore(")").toLong()
+        val survey = surveyService.createSurvey(chatId, question, expectedCount)
+        logger.info("Survey created with ID: ${survey.id}")
 
-        logger.info("Survey created (ID: $surveyId), waiting for completion")
+        val message = """
+            📊 New Survey!
 
-        return surveyTools.waitForSurveyCompletion(surveyId, timeoutMinutes = 10)
-    }
+            Question: $question
 
-    @AchievesGoal(description = "Survey responses have been collected and processed")
-    @Action
-    fun processSurveyResults(
-        surveyResults: SurveyResults,
-        context: OperationContext
-    ): String {
-        return context.ai()
-            .withAutoLlm()
-            .generateText(
-                """
-                Survey has been completed! The results are available on the blackboard.
+            Please reply with your answer. Survey completes after $expectedCount responses.
+        """.trimIndent()
 
-                Question: ${surveyResults.question}
+        val sendResult = telegramTools.sendTelegramMessage(chatId, message)
+        logger.info("Survey sent to Telegram: $sendResult")
 
-                Responses:
-                ${surveyResults.responses.joinToString("\n") { response ->
-                    "- ${response.userName ?: "User ${response.userId}"}: ${response.response}"
-                }}
-
-                Now format a summary message, for example:
-                "Availability of everyone: [list each person's response]" or "Everyone's favourite colours: [list each person's response]", make sure it applies to the question that was initially asked.
-                """.trimIndent()
-            )
+        return SurveyInitiated(
+            surveyId = survey.id!!,
+            chatId = chatId,
+            question = question,
+            expectedCount = expectedCount
+        )
     }
 }

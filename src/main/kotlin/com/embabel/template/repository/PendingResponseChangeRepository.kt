@@ -15,14 +15,12 @@
  */
 package com.embabel.template.repository
 
-import com.embabel.template.entity.SurveyResponse
+import com.embabel.template.entity.PendingResponseChange
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.stereotype.Repository
 
 @Repository
-interface SurveyResponseRepository : JpaRepository<SurveyResponse, Long> {
-    fun findBySurveyId(surveyId: Long): List<SurveyResponse>
-    fun findBySurveyIdAndUserId(surveyId: Long, userId: Long): SurveyResponse?
-    fun existsBySurveyIdAndUserId(surveyId: Long, userId: Long): Boolean
-    fun countBySurveyId(surveyId: Long): Int
+interface PendingResponseChangeRepository : JpaRepository<PendingResponseChange, Long> {
+    fun findByChatIdAndUserId(chatId: Long, userId: Long): PendingResponseChange?
+    fun deleteByChatIdAndUserId(chatId: Long, userId: Long)
 }
